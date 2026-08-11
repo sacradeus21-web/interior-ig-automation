@@ -15,5 +15,10 @@
     "status": "posted",
     "post_id": "trend-001",
     "ig_media_id": "17953847517198116"
+  },
+  {
+    "timestamp": "2026-08-11T13:37:49.111019+00:00",
+    "status": "skipped",
+    "reason": "no complete carousel image set in images/inbox/"
   }
 ]
