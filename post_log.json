@@ -1,1 +1,7 @@
-[]
+[
+  {
+    "timestamp": "2026-08-11T12:31:17.881221+00:00",
+    "status": "skipped",
+    "reason": "no image ready in images/inbox/"
+  }
+]
