@@ -6,10 +6,14 @@ content_bank.json에서 아직 게시하지 않았고(used=false) images/inbox/�
 게시할 콘텐츠가 없으면 에러 없이 조용히 종료한다(무인 실행 안전성).
 
 필요 환경변수:
-  IG_ACCESS_TOKEN       - Meta 장기 액세스 토큰
-  IG_BUSINESS_ACCOUNT_ID - Instagram 비즈니스 계정 ID
+  IG_ACCESS_TOKEN       - Instagram 로그인 방식으로 발급한 장기(60일) 액세스 토큰
+  IG_BUSINESS_ACCOUNT_ID - Instagram 비즈니스 계정의 사용자 ID (graph.instagram.com 기준)
   GITHUB_REPO           - "owner/repo" 형식 (이미지 raw URL 생성용)
   GITHUB_BRANCH         - 기본값 "main"
+
+API 호출은 graph.instagram.com을 사용한다 (graph.facebook.com이 아님) —
+Instagram 로그인 방식(Business Login for Instagram)으로 발급한 토큰은
+이 호스트에서만 유효하다.
 """
 import argparse
 import json
@@ -79,7 +83,7 @@ def graph_request(url, data=None, method="POST"):
 
 
 def publish_to_instagram(image_url, caption, access_token, ig_account_id):
-    base = f"https://graph.facebook.com/{GRAPH_API_VERSION}/{ig_account_id}"
+    base = f"https://graph.instagram.com/{GRAPH_API_VERSION}/{ig_account_id}"
 
     container = graph_request(
         f"{base}/media",

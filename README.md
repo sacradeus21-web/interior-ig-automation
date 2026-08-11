@@ -23,23 +23,32 @@ scripts/post_to_instagram.py  # 실제 게시 스크립트
    완료 후 `used=true` 처리 + 이미지를 `images/posted/`로 이동 + 로그 기록 후 자동 commit/push합니다.
 4. 준비된 이미지가 하나도 없으면 에러 없이 "게시할 콘텐츠 없음"으로 조용히 스킵합니다 (무인 실행 중 죽지 않도록).
 
-## Phase 2 — Meta 개발자 앱 / 액세스 토큰 준비 체크리스트
+## Phase 2 — Meta 개발자 앱 / 액세스 토큰 준비 (완료됨, 2026-08-11)
 
-실제 자동 게시를 시작하려면 아래 절차가 **한 번** 필요합니다 (본인 Meta/Facebook 로그인이 필요해서
-Claude가 대신 클릭할 수 없는 구간입니다. 필요하면 화면 공유하듯 같이 진행할 수 있어요).
+`sweet.studio_official`에는 연결된 Facebook 페이지가 없어서, 표준 "Facebook 로그인" 방식(Graph API Explorer의
+페이지 액세스 토큰) 대신 **"Instagram 로그인이 포함된 API" (Business Login for Instagram)** 방식을 사용했다.
+실제로 밟은 절차:
 
-- [ ] [Meta for Developers](https://developers.facebook.com/apps)에서 새 앱 생성 (유형: "비즈니스")
-- [ ] 앱에 **Instagram Graph API** 제품 추가
-- [ ] 이미 연동되어 있는 Facebook 페이지 ↔ Instagram 비즈니스 계정(`sweet.studio_official`) 연결 확인
-- [ ] Graph API Explorer 또는 앱 설정에서 아래 권한을 포함한 사용자 액세스 토큰 발급
-  - `instagram_basic`, `instagram_content_publish`, `pages_read_engagement`, `pages_show_list`
-- [ ] 단기 토큰 → **장기(60일) 토큰**으로 교환 (`/oauth/access_token` with `fb_exchange_token`)
-- [ ] `GET /me/accounts` 로 페이지 액세스 토큰 확인 → `GET /{page-id}?fields=instagram_business_account`
-      로 **IG 비즈니스 계정 ID** 확인
-- [ ] 발급받은 값 2개를 기록해두기: `IG_ACCESS_TOKEN`, `IG_BUSINESS_ACCOUNT_ID`
+- [x] [Meta for Developers](https://developers.facebook.com/apps)에서 "SweetStudio Content Publisher" 앱 생성
+- [x] 이용 사례에 **Instagram API** 추가 (Instagram 로그인 포함된 API 설정 탭)
+- [x] 앱 역할 → **Instagram 테스터**로 `sweet.studio_official` 추가 → 계정 소유자가 Instagram 웹
+      (설정 → 앱 및 웹사이트 → 테스터 초대)에서 수락
+- [x] 권한 및 기능 페이지에서 `instagram_content_publish` 권한 추가 ("테스트 준비 완료" 상태 확인)
+- [x] Instagram API 설정 페이지 2단계 "액세스 토큰 생성" → 계정 행의 "토큰 생성" 클릭 → 팝업에서 로그인 및
+      권한 승인 → 표시된 토큰을 복사 (이 팝업은 자동으로 닫히므로, 닫히기 전에 값을 복사해야 함)
+- [x] 토큰 유효성 확인: `GET https://graph.instagram.com/v21.0/me?fields=id,username,account_type`
+      → `sweet.studio_official`, BUSINESS 계정, ID `27597615366577081` 확인됨
 
-> 장기 토큰도 60일 후 만료됩니다. 만료 전 재발급 절차를 리마인드 받고 싶다면 알려주세요 —
-> 별도 예약 루틴으로 만료 임박 알림도 만들 수 있습니다.
+**중요:** 이 방식으로 발급된 토큰은 **이미 60일짜리 장기 토큰**이라 별도의
+`fb_exchange_token`/`ig_exchange_token` 교환이 필요 없다 (오히려 교환을 시도하면
+"Session key invalid" 에러가 난다 — 옛 Instagram Basic Display API용 엔드포인트라서 이 토큰 타입과 호환되지 않음).
+API 호출은 반드시 `graph.instagram.com`을 사용해야 하며(`graph.facebook.com` 아님), 확보한 값은:
+
+- `IG_ACCESS_TOKEN` = Instagram 로그인 방식으로 발급받은 토큰
+- `IG_BUSINESS_ACCOUNT_ID` = `27597615366577081`
+
+> 60일 후 토큰이 만료되면 Meta 개발자 콘솔의 같은 "토큰 생성" 버튼을 다시 눌러 재발급해야 한다.
+> 만료 임박 알림이 필요하면 별도 예약 루틴으로 만들 수 있다.
 
 ## 로컬 테스트
 
