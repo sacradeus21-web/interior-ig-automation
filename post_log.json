@@ -20,5 +20,12 @@
     "timestamp": "2026-08-11T13:37:49.111019+00:00",
     "status": "skipped",
     "reason": "no complete carousel image set in images/inbox/"
+  },
+  {
+    "timestamp": "2026-08-11T14:16:03.734373+00:00",
+    "status": "failed",
+    "post_id": "reel-001",
+    "media_kind": "reel",
+    "error": "미디어 컨테이너가 시간 내에 준비되지 않았습니다 (timeout)"
   }
 ]

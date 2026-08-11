@@ -1,15 +1,20 @@
 #!/usr/bin/env python3
-"""Instagram Graph API 자동 게시 스크립트.
+"""Instagram Graph API 자동 게시 스크립트 (캐러셀 + AI 릴스 지원).
 
-content_bank.json에서 아직 게시하지 않았고(used=false) images/inbox/에
-이미지 파일이 준비된 첫 항목을 찾아 인스타그램에 게시한다.
+content_bank.json에서 아직 게시하지 않은(used=false) 첫 항목을 찾아 게시한다.
+- media_kind="carousel": image_files에 나열된 이미지가 images/inbox/에 전부
+  (최소 2장) 준비돼 있어야 게시 대상이 된다.
+- media_kind="reel": video_file이 videos/inbox/에 이미 있으면 바로 쓰고,
+  없으면 video_prompt로 muapi CLI를 호출해 그 자리에서 생성한다(완전 자동).
 게시할 콘텐츠가 없으면 에러 없이 조용히 종료한다(무인 실행 안전성).
 
 필요 환경변수:
-  IG_ACCESS_TOKEN       - Instagram 로그인 방식으로 발급한 장기(60일) 액세스 토큰
+  IG_ACCESS_TOKEN        - Instagram 로그인 방식으로 발급한 장기(60일) 액세스 토큰
   IG_BUSINESS_ACCOUNT_ID - Instagram 비즈니스 계정의 사용자 ID (graph.instagram.com 기준)
-  GITHUB_REPO           - "owner/repo" 형식 (이미지 raw URL 생성용)
-  GITHUB_BRANCH         - 기본값 "main"
+  GITHUB_REPO            - "owner/repo" 형식 (미디어 raw URL 생성용)
+  GITHUB_BRANCH          - 기본값 "main"
+  MUAPI_API_KEY          - 릴스용 영상이 아직 없을 때 muapi CLI 인증에 필요
+                           (muapi auth configure --api-key로 이미 로컬에 설정돼 있으면 불필요)
 
 API 호출은 graph.instagram.com을 사용한다 (graph.facebook.com이 아님) —
 Instagram 로그인 방식(Business Login for Instagram)으로 발급한 토큰은
@@ -20,6 +25,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -33,9 +39,15 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
 ROOT = Path(__file__).resolve().parent.parent
 CONTENT_BANK = ROOT / "content_bank.json"
 POST_LOG = ROOT / "post_log.json"
-INBOX_DIR = ROOT / "images" / "inbox"
-POSTED_DIR = ROOT / "images" / "posted"
+IMAGES_INBOX_DIR = ROOT / "images" / "inbox"
+IMAGES_POSTED_DIR = ROOT / "images" / "posted"
+VIDEOS_INBOX_DIR = ROOT / "videos" / "inbox"
+VIDEOS_POSTED_DIR = ROOT / "videos" / "posted"
 GRAPH_API_VERSION = "v21.0"
+MIN_CAROUSEL_ITEMS = 2
+VIDEO_MODEL = "kling-master"
+VIDEO_DURATION = 5
+VIDEO_ASPECT_RATIO = "9:16"
 
 
 def load_json(path, default):
@@ -60,8 +72,13 @@ def find_next_postable(bank):
     for post in bank["posts"]:
         if post.get("used"):
             continue
-        image_path = INBOX_DIR / post["image_file"]
-        if image_path.exists():
+        kind = post.get("media_kind", "carousel")
+        if kind == "reel":
+            return post  # 영상이 없으면 게시 시점에 생성 시도 (완전 자동)
+        image_files = post.get("image_files", [])
+        if len(image_files) < MIN_CAROUSEL_ITEMS:
+            continue
+        if all((IMAGES_INBOX_DIR / f).exists() for f in image_files):
             return post
     return None
 
@@ -82,20 +99,113 @@ def graph_request(url, data=None, method="POST"):
         raise RuntimeError(f"Graph API 오류 ({e.code}): {detail}") from e
 
 
-def publish_to_instagram(image_url, caption, access_token, ig_account_id):
-    base = f"https://graph.instagram.com/{GRAPH_API_VERSION}/{ig_account_id}"
+def wait_until_container_ready(api_root, creation_id, access_token, timeout=60, interval=3):
+    elapsed = 0
+    while elapsed < timeout:
+        status = graph_request(
+            f"{api_root}/{creation_id}?fields=status_code&access_token={access_token}",
+            method="GET",
+        )
+        code = status.get("status_code")
+        if code == "FINISHED":
+            return
+        if code == "ERROR":
+            raise RuntimeError(f"미디어 컨테이너 처리 실패: {status}")
+        time.sleep(interval)
+        elapsed += interval
+    raise RuntimeError("미디어 컨테이너가 시간 내에 준비되지 않았습니다 (timeout)")
 
-    container = graph_request(
-        f"{base}/media",
-        {"image_url": image_url, "caption": caption, "access_token": access_token},
+
+def publish_carousel_to_instagram(image_urls, caption, access_token, ig_account_id):
+    api_root = f"https://graph.instagram.com/{GRAPH_API_VERSION}"
+    account_base = f"{api_root}/{ig_account_id}"
+
+    child_ids = []
+    for image_url in image_urls:
+        child = graph_request(
+            f"{account_base}/media",
+            {
+                "image_url": image_url,
+                "is_carousel_item": "true",
+                "access_token": access_token,
+            },
+        )
+        wait_until_container_ready(api_root, child["id"], access_token)
+        child_ids.append(child["id"])
+
+    parent = graph_request(
+        f"{account_base}/media",
+        {
+            "media_type": "CAROUSEL",
+            "children": ",".join(child_ids),
+            "caption": caption,
+            "access_token": access_token,
+        },
     )
-    creation_id = container["id"]
+    wait_until_container_ready(api_root, parent["id"], access_token)
 
     published = graph_request(
-        f"{base}/media_publish",
-        {"creation_id": creation_id, "access_token": access_token},
+        f"{account_base}/media_publish",
+        {"creation_id": parent["id"], "access_token": access_token},
     )
     return published["id"]
+
+
+def publish_reel_to_instagram(video_url, caption, access_token, ig_account_id):
+    api_root = f"https://graph.instagram.com/{GRAPH_API_VERSION}"
+    account_base = f"{api_root}/{ig_account_id}"
+
+    container = graph_request(
+        f"{account_base}/media",
+        {
+            "media_type": "REELS",
+            "video_url": video_url,
+            "caption": caption,
+            "share_to_feed": "true",
+            "is_ai_generated": "true",
+            "access_token": access_token,
+        },
+    )
+    # 영상은 처리 시간이 이미지보다 훨씬 길다 (보통 30초~2분, 최대 권장 대기 5분)
+    wait_until_container_ready(api_root, container["id"], access_token, timeout=300, interval=10)
+
+    published = graph_request(
+        f"{account_base}/media_publish",
+        {"creation_id": container["id"], "access_token": access_token},
+    )
+    return published["id"]
+
+
+def generate_video_via_muapi(prompt, target_path):
+    VIDEOS_INBOX_DIR.mkdir(parents=True, exist_ok=True)
+    before = set(os.listdir(VIDEOS_INBOX_DIR))
+
+    env = dict(os.environ)
+    env["PYTHONIOENCODING"] = "utf-8"
+    result = subprocess.run(
+        [
+            "muapi", "video", "generate", prompt,
+            "--model", VIDEO_MODEL,
+            "--duration", str(VIDEO_DURATION),
+            "--aspect-ratio", VIDEO_ASPECT_RATIO,
+            "--download", str(VIDEOS_INBOX_DIR),
+        ],
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        timeout=600,
+    )
+    stdout = result.stdout.decode("utf-8", errors="replace")
+    stderr = result.stderr.decode("utf-8", errors="replace")
+    if result.returncode != 0:
+        raise RuntimeError(f"muapi 영상 생성 실패: {stderr or stdout}")
+
+    after = set(os.listdir(VIDEOS_INBOX_DIR))
+    new_files = [f for f in (after - before) if f.lower().endswith((".mp4", ".mov"))]
+    if not new_files:
+        raise RuntimeError(f"muapi 생성 결과 파일을 찾을 수 없습니다. 출력: {stdout}")
+
+    (VIDEOS_INBOX_DIR / new_files[0]).rename(target_path)
 
 
 def git(*args):
@@ -103,14 +213,45 @@ def git(*args):
 
 
 def commit_and_push(message):
-    git("add", "content_bank.json", "post_log.json", "images/")
-    result = subprocess.run(
-        ["git", "diff", "--cached", "--quiet"], cwd=ROOT
-    )
+    git("add", "-A")
+    result = subprocess.run(["git", "diff", "--cached", "--quiet"], cwd=ROOT)
     if result.returncode == 0:
         return  # 변경 없음
     git("commit", "-m", message)
     git("push")
+
+
+def handle_carousel(post, github_repo, github_branch, access_token, ig_account_id):
+    image_files = post["image_files"]
+    image_urls = [
+        f"https://raw.githubusercontent.com/{github_repo}/{github_branch}/images/inbox/{f}"
+        for f in image_files
+    ]
+    media_id = publish_carousel_to_instagram(image_urls, build_caption(post), access_token, ig_account_id)
+
+    IMAGES_POSTED_DIR.mkdir(parents=True, exist_ok=True)
+    for f in image_files:
+        (IMAGES_INBOX_DIR / f).rename(IMAGES_POSTED_DIR / f)
+
+    return media_id, {"image_count": len(image_files)}
+
+
+def handle_reel(post, github_repo, github_branch, access_token, ig_account_id):
+    video_path = VIDEOS_INBOX_DIR / post["video_file"]
+
+    if not video_path.exists():
+        print(f"영상이 아직 없어 muapi로 생성합니다: {post['id']}")
+        generate_video_via_muapi(post["video_prompt"], video_path)
+        # Graph API가 fetch할 수 있도록, 발행 시도 전에 먼저 공개 저장소에 반영
+        commit_and_push(f"content: {post['id']} 영상 생성")
+
+    video_url = f"https://raw.githubusercontent.com/{github_repo}/{github_branch}/videos/inbox/{post['video_file']}"
+    media_id = publish_reel_to_instagram(video_url, build_caption(post), access_token, ig_account_id)
+
+    VIDEOS_POSTED_DIR.mkdir(parents=True, exist_ok=True)
+    video_path.rename(VIDEOS_POSTED_DIR / post["video_file"])
+
+    return media_id, {"video_file": post["video_file"]}
 
 
 def main():
@@ -122,19 +263,20 @@ def main():
     post = find_next_postable(bank)
 
     if post is None:
-        print("게시할 콘텐츠가 없습니다: images/inbox/에 대기 중인 이미지가 없어요. 건너뜁니다.")
+        print(f"게시할 콘텐츠가 없습니다: 캐러셀용 이미지(최소 {MIN_CAROUSEL_ITEMS}장)가 다 준비된 항목도, 릴스 항목도 없어요. 건너뜁니다.")
         append_log({
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "status": "skipped",
-            "reason": "no image ready in images/inbox/",
+            "reason": "no postable content",
         })
-        commit_and_push("chore: post_log 업데이트 (게시할 이미지 없음)")
+        commit_and_push("chore: post_log 업데이트 (게시할 콘텐츠 없음)")
         return 0
 
+    kind = post.get("media_kind", "carousel")
     caption = build_caption(post)
 
     if args.dry_run:
-        print(f"[dry-run] 게시 예정 콘텐츠: {post['id']} - {post['topic']}")
+        print(f"[dry-run] 게시 예정 콘텐츠: {post['id']} - {post['topic']} ({kind})")
         print(f"[dry-run] 캡션:\n{caption}")
         return 0
 
@@ -143,19 +285,18 @@ def main():
     github_repo = os.environ["GITHUB_REPO"]
     github_branch = os.environ.get("GITHUB_BRANCH", "main")
 
-    image_url = (
-        f"https://raw.githubusercontent.com/{github_repo}/{github_branch}"
-        f"/images/inbox/{post['image_file']}"
-    )
-
     try:
-        media_id = publish_to_instagram(image_url, caption, access_token, ig_account_id)
+        if kind == "reel":
+            media_id, extra = handle_reel(post, github_repo, github_branch, access_token, ig_account_id)
+        else:
+            media_id, extra = handle_carousel(post, github_repo, github_branch, access_token, ig_account_id)
     except Exception as e:
         print(f"게시 실패: {e}", file=sys.stderr)
         append_log({
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "status": "failed",
             "post_id": post["id"],
+            "media_kind": kind,
             "error": str(e),
         })
         commit_and_push(f"chore: 게시 실패 로그 ({post['id']})")
@@ -169,14 +310,13 @@ def main():
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "status": "posted",
         "post_id": post["id"],
+        "media_kind": kind,
         "ig_media_id": media_id,
+        **extra,
     })
 
-    POSTED_DIR.mkdir(parents=True, exist_ok=True)
-    (INBOX_DIR / post["image_file"]).rename(POSTED_DIR / post["image_file"])
-
-    commit_and_push(f"post: {post['id']} 게시 완료")
-    print(f"게시 완료: {post['id']} (media_id={media_id})")
+    commit_and_push(f"post: {post['id']} 게시 완료 ({kind})")
+    print(f"게시 완료: {post['id']} (media_id={media_id}, {kind})")
     return 0
 
 
