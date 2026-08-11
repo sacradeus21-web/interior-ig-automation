@@ -166,8 +166,8 @@ def publish_reel_to_instagram(video_url, caption, access_token, ig_account_id):
             "access_token": access_token,
         },
     )
-    # 영상은 처리 시간이 이미지보다 훨씬 길다 (보통 30초~2분, 최대 권장 대기 5분)
-    wait_until_container_ready(api_root, container["id"], access_token, timeout=300, interval=10)
+    # 영상은 처리 시간이 이미지보다 훨씬 길다 (보통 30초~2분, 드물게 10분 가까이 걸리는 경우도 있음)
+    wait_until_container_ready(api_root, container["id"], access_token, timeout=600, interval=15)
 
     published = graph_request(
         f"{account_base}/media_publish",
