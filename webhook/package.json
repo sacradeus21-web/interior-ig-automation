@@ -1,0 +1,6 @@
+{
+  "name": "sweet-studio-ig-webhook",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SWEET STUDIO Instagram 댓글->비공개답장->PDF 발송 웹훅 (Vercel 서버리스 함수)"
+}
