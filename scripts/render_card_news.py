@@ -112,8 +112,8 @@ COVER_TEMPLATE = """
 COVER_PHOTO_TEMPLATE = """
 <div class="card" style="background: #2B2622;">
   <img src="{photo_uri}" style="position: absolute; top: 0; left: 0; width: {width}px; height: {height}px; object-fit: cover;">
-  <div style="position: absolute; top: 0; left: 0; width: {width}px; height: {height}px; background: linear-gradient(180deg, rgba(20,16,12,0.15) 0%, rgba(20,16,12,0.35) 55%, rgba(20,16,12,0.88) 100%);"></div>
-  <div style="position: relative; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; text-align: center; padding: 0 90px 170px 90px;">
+  <div style="position: absolute; top: 0; left: 0; width: {width}px; height: {height}px; background: linear-gradient(180deg, rgba(20,16,12,0.45) 0%, rgba(20,16,12,0.4) 40%, rgba(20,16,12,0.55) 100%);"></div>
+  <div style="position: relative; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 0 90px;">
     <div style="background: rgba(255,255,255,0.14); backdrop-filter: blur(6px); border: 1px solid rgba(255,255,255,0.35); border-radius: 999px; padding: 14px 32px; font-weight: 600; font-size: 26px; color: #F6F1EA; margin-bottom: 40px;">
       {hook}
     </div>
