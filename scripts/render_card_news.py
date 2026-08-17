@@ -11,6 +11,7 @@ Chromium)로 HTML을 그대로 스크린샷 떠서 이미지화하므로, 사람
   tip   - 번호 + 소제목 + 본문 (여러 장 가능)
   outro - 마지막 장. 저장/팔로우 유도 + 브랜드
 """
+import base64
 import json
 import sys
 from pathlib import Path
@@ -125,6 +126,33 @@ TIP_TEMPLATE = """
 </div>
 """
 
+TIP_PHOTO_TEMPLATE = """
+<div class="card" style="background: #FFFFFF;">
+  <img src="{photo_uri}" style="width: {width}px; height: 680px; object-fit: cover; display: block;">
+  <div style="padding: 44px 90px 0 90px;">
+    <div style="font-weight: 800; font-size: 56px; color: #EDE1D3; line-height: 1; -webkit-text-stroke: 2px #C1694F;">
+      {number}
+    </div>
+    <div style="margin-top: 14px; font-weight: 800; font-size: 38px; color: #2B2622; line-height: 1.3;">
+      {title}
+    </div>
+    <div style="margin-top: 10px; font-weight: 600; font-size: 21px; color: #C1694F;">
+      {meta_line}
+    </div>
+    <div style="margin-top: 16px; font-weight: 400; font-size: 22px; color: #59503F; line-height: 1.5; white-space: pre-line;">
+      {body}
+    </div>
+  </div>
+  <div class="footer" style="bottom: 32px;">
+    <div class="brand">
+      <div class="brand-name">{brand_name}</div>
+      <div class="brand-sub">{brand_sub}</div>
+    </div>
+    <div class="page-indicator">{page} / {total}</div>
+  </div>
+</div>
+"""
+
 OUTRO_TEMPLATE = """
 <div class="card" style="background: #2B2622; align-items: center; justify-content: center; text-align: center; padding: 0 100px;">
   <div style="font-weight: 800; font-size: 52px; color: #F6F1EA; line-height: 1.4; white-space: pre-line;">
@@ -144,6 +172,14 @@ OUTRO_TEMPLATE = """
 """
 
 
+def photo_data_uri(relative_path):
+    photo_path = (ROOT / relative_path).resolve()
+    data = base64.b64encode(photo_path.read_bytes()).decode("ascii")
+    ext = photo_path.suffix.lstrip(".").lower()
+    mime = "jpeg" if ext in ("jpg", "jpeg") else ext
+    return f"data:image/{mime};base64,{data}"
+
+
 def render_card_html(card, page, total):
     kind = card["type"]
     if kind == "cover":
@@ -157,15 +193,29 @@ def render_card_html(card, page, total):
             total=total,
         )
     elif kind == "tip":
-        body = TIP_TEMPLATE.format(
-            number=f"{page - 1:02d}",
-            title=card["title"],
-            body=card["body"],
-            brand_name=BRAND_NAME,
-            brand_sub=BRAND_SUB,
-            page=page,
-            total=total,
-        )
+        if card.get("photo"):
+            body = TIP_PHOTO_TEMPLATE.format(
+                photo_uri=photo_data_uri(card["photo"]),
+                width=CARD_WIDTH,
+                number=f"{page - 1:02d}",
+                title=card["title"],
+                meta_line=card.get("meta_line", ""),
+                body=card["body"],
+                brand_name=BRAND_NAME,
+                brand_sub=BRAND_SUB,
+                page=page,
+                total=total,
+            )
+        else:
+            body = TIP_TEMPLATE.format(
+                number=f"{page - 1:02d}",
+                title=card["title"],
+                body=card["body"],
+                brand_name=BRAND_NAME,
+                brand_sub=BRAND_SUB,
+                page=page,
+                total=total,
+            )
     elif kind == "outro":
         body = OUTRO_TEMPLATE.format(
             message=card["message"],
