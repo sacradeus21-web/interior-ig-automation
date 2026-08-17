@@ -11,8 +11,11 @@ images/inbox/          # 캐러셀용 이미지를 넣어두는 곳 (content_ban
 images/posted/          # 게시 완료된 이미지가 자동으로 이동되는 곳
 videos/inbox/           # 릴스용 영상 (없으면 muapi로 자동 생성됨)
 videos/posted/          # 게시 완료된 영상이 자동으로 이동되는 곳
+card_news/generated/    # 카드뉴스용 렌더링 이미지 (게시 시점에 자동 생성됨)
+card_news/posted/       # 게시 완료된 카드뉴스 이미지가 자동으로 이동되는 곳
 post_log.json          # 게시 성공/실패/스킵 이력
-scripts/post_to_instagram.py  # 실제 게시 스크립트 (캐러셀 + 릴스)
+scripts/post_to_instagram.py  # 실제 게시 스크립트 (캐러셀 + 릴스 + 카드뉴스)
+scripts/render_card_news.py   # 카드뉴스 HTML/CSS 템플릿 → 이미지 렌더러
 ```
 
 ## 사용 흐름 (캐러셀 형식)
@@ -54,6 +57,26 @@ muapi auth configure --api-key "<muapi.ai에서 발급받은 키>"
 Instagram 릴스 탭에 실제로 노출되려면 5~90초·9:16 비율이어야 하므로(API 자체는 300MB/15분까지 받아주지만
 그 이상은 그냥 "영상 게시물"로만 처리됨), 기본 설정(5초 9:16)을 벗어나지 않는 게 좋다. `is_ai_generated:
 true`를 함께 보내 AI 생성 영상임을 인스타그램에 투명하게 알린다.
+
+## 카드뉴스(텍스트 오버레이 디자인 카드) 흐름 — 완전 자동
+
+`content_bank.json`에서 `media_kind: "card_news"`인 항목도 릴스처럼 **사람이 이미지를 준비할 필요가
+없다**. `cards` 배열(각 카드는 `type: cover/tip/outro` + 텍스트)을 `scripts/render_card_news.py`가
+Playwright(headless Chromium)로 HTML/CSS 템플릿을 그대로 스크린샷 떠서 PNG로 만들고, 저장소에
+커밋·푸시한 뒤 일반 캐러셀과 동일한 방식으로 발행한다.
+
+디자인 톤: 크림/테라코타/차콜 팔레트, Pretendard 폰트 — SWEET STUDIO 브랜드 톤에 맞춘 에디토리얼
+스타일 (아이콘·캐릭터 일러스트 없이 텍스트 중심). 색상/레이아웃을 바꾸고 싶으면
+`scripts/render_card_news.py`의 `BASE_CSS`/`*_TEMPLATE` 문자열을 수정하면 된다.
+
+사전 준비(1회):
+```bash
+pip install -r requirements.txt
+python -m playwright install chromium
+```
+(클라우드 예약 루틴 환경에서도 매 실행 전 위 두 줄이 필요하다 — muapi 인증과 마찬가지로 새 환경마다
+다시 설치해야 한다. `playwright install chromium --with-deps`를 쓰면 Linux 컨테이너에 필요한 OS
+의존성까지 같이 설치된다.)
 
 ## Phase 2 — Meta 개발자 앱 / 액세스 토큰 준비 (완료됨, 2026-08-11)
 

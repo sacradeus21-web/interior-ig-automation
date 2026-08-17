@@ -6,6 +6,9 @@ content_bank.json에서 아직 게시하지 않은(used=false) 첫 항목을 찾
   (최소 2장) 준비돼 있어야 게시 대상이 된다.
 - media_kind="reel": video_file이 videos/inbox/에 이미 있으면 바로 쓰고,
   없으면 video_prompt로 muapi CLI를 호출해 그 자리에서 생성한다(완전 자동).
+- media_kind="card_news": cards 배열을 scripts/render_card_news.py가
+  HTML/CSS 템플릿(Playwright headless Chromium)으로 렌더링해 이미지
+  캐러셀로 게시한다(완전 자동, 사람이 이미지를 넣어줄 필요 없음).
 게시할 콘텐츠가 없으면 에러 없이 조용히 종료한다(무인 실행 안전성).
 
 필요 환경변수:
@@ -32,6 +35,8 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
+from render_card_news import render_cards
+
 if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
@@ -43,6 +48,9 @@ IMAGES_INBOX_DIR = ROOT / "images" / "inbox"
 IMAGES_POSTED_DIR = ROOT / "images" / "posted"
 VIDEOS_INBOX_DIR = ROOT / "videos" / "inbox"
 VIDEOS_POSTED_DIR = ROOT / "videos" / "posted"
+CARD_NEWS_GENERATED_DIR = ROOT / "card_news" / "generated"
+CARD_NEWS_POSTED_DIR = ROOT / "card_news" / "posted"
+MIN_CARD_NEWS_ITEMS = 2
 GRAPH_API_VERSION = "v21.0"
 MIN_CAROUSEL_ITEMS = 2
 VIDEO_MODEL = "kling-master"
@@ -73,8 +81,8 @@ def find_next_postable(bank):
         if post.get("used"):
             continue
         kind = post.get("media_kind", "carousel")
-        if kind == "reel":
-            return post  # 영상이 없으면 게시 시점에 생성 시도 (완전 자동)
+        if kind in ("reel", "card_news"):
+            return post  # 매번 게시 시점에 자동 생성하는 타입이라 항상 게시 가능
         image_files = post.get("image_files", [])
         if len(image_files) < MIN_CAROUSEL_ITEMS:
             continue
@@ -254,6 +262,30 @@ def handle_reel(post, github_repo, github_branch, access_token, ig_account_id):
     return media_id, {"video_file": post["video_file"]}
 
 
+def handle_card_news(post, github_repo, github_branch, access_token, ig_account_id):
+    cards = post["cards"]
+    if len(cards) < MIN_CARD_NEWS_ITEMS:
+        raise RuntimeError(f"카드뉴스는 최소 {MIN_CARD_NEWS_ITEMS}장이 필요합니다 (현재 {len(cards)}장)")
+
+    gen_dir = CARD_NEWS_GENERATED_DIR / post["id"]
+    image_paths = render_cards(cards, gen_dir, post["id"])
+
+    # Graph API가 fetch할 수 있도록, 발행 시도 전에 먼저 공개 저장소에 반영
+    commit_and_push(f"content: {post['id']} 카드뉴스 이미지 생성")
+
+    image_urls = [
+        f"https://raw.githubusercontent.com/{github_repo}/{github_branch}/card_news/generated/{post['id']}/{p.name}"
+        for p in image_paths
+    ]
+    media_id = publish_carousel_to_instagram(image_urls, build_caption(post), access_token, ig_account_id)
+
+    CARD_NEWS_POSTED_DIR.mkdir(parents=True, exist_ok=True)
+    posted_dir = CARD_NEWS_POSTED_DIR / post["id"]
+    gen_dir.rename(posted_dir)
+
+    return media_id, {"card_count": len(image_paths)}
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true", help="실제 게시 없이 로직만 확인")
@@ -288,6 +320,8 @@ def main():
     try:
         if kind == "reel":
             media_id, extra = handle_reel(post, github_repo, github_branch, access_token, ig_account_id)
+        elif kind == "card_news":
+            media_id, extra = handle_card_news(post, github_repo, github_branch, access_token, ig_account_id)
         else:
             media_id, extra = handle_carousel(post, github_repo, github_branch, access_token, ig_account_id)
     except Exception as e:
