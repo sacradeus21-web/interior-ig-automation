@@ -24,6 +24,8 @@ CARD_HEIGHT = 1350
 
 BRAND_NAME = "SWEET STUDIO"
 BRAND_SUB = "경남인테리어"
+DEFAULT_AVATAR = "assets/photos/sweet_studio_profile.jpg"
+DEFAULT_BIO = "부산·양산·경남 인테리어\n디자인부터 시공까지 직접 관리\n상담·견적 문의는 DM으로"
 
 FONT_CSS_URL = "https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css"
 
@@ -105,6 +107,33 @@ COVER_TEMPLATE = """
 </div>
 """
 
+# 피드에 노출되는 첫 장(=커버)을 무드컷 배경으로 분위기 있게 만드는 버전.
+# 사진 위에 어두운 그라데이션을 깔아 흰 글씨가 잘 보이게 한다.
+COVER_PHOTO_TEMPLATE = """
+<div class="card" style="background: #2B2622;">
+  <img src="{photo_uri}" style="position: absolute; top: 0; left: 0; width: {width}px; height: {height}px; object-fit: cover;">
+  <div style="position: absolute; top: 0; left: 0; width: {width}px; height: {height}px; background: linear-gradient(180deg, rgba(20,16,12,0.15) 0%, rgba(20,16,12,0.35) 55%, rgba(20,16,12,0.88) 100%);"></div>
+  <div style="position: relative; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; text-align: center; padding: 0 90px 170px 90px;">
+    <div style="background: rgba(255,255,255,0.14); backdrop-filter: blur(6px); border: 1px solid rgba(255,255,255,0.35); border-radius: 999px; padding: 14px 32px; font-weight: 600; font-size: 26px; color: #F6F1EA; margin-bottom: 40px;">
+      {hook}
+    </div>
+    <div style="font-weight: 800; font-size: 60px; line-height: 1.35; color: #FFFFFF; white-space: pre-line; text-shadow: 0 2px 16px rgba(0,0,0,0.35);">
+      {headline}
+    </div>
+    <div style="margin-top: 36px; font-weight: 500; font-size: 24px; color: #E3D9CC;">
+      {subtext}
+    </div>
+  </div>
+  <div class="footer">
+    <div class="brand">
+      <div class="brand-name" style="color: #F6F1EA;">{brand_name}</div>
+      <div class="brand-sub" style="color: #C9BDAE;">{brand_sub}</div>
+    </div>
+    <div class="page-indicator" style="color: #A69C8D;">{page} / {total}</div>
+  </div>
+</div>
+"""
+
 TIP_TEMPLATE = """
 <div class="card" style="background: #FFFFFF; padding: 120px 90px 0 90px;">
   <div style="font-weight: 800; font-size: 130px; color: #EDE1D3; line-height: 1; -webkit-text-stroke: 3px #7A2333;">
@@ -171,6 +200,41 @@ OUTRO_TEMPLATE = """
 </div>
 """
 
+# 마지막 장을 "내 프로필 스크린샷 목업 + 팔로우 버튼 강조" 스타일로 만드는
+# 버전 (참고 레퍼런스: 팔로우 버튼에 화살표 콜아웃을 얹은 카드뉴스 아웃트로).
+OUTRO_PROFILE_TEMPLATE = """
+<div class="card" style="background: linear-gradient(165deg, #F6F1EA 0%, #EDE1D3 100%); align-items: center; justify-content: center; text-align: center; padding: 0 80px;">
+  <div style="font-weight: 800; font-size: 42px; color: #2B2622; line-height: 1.4; white-space: pre-line; margin-bottom: 44px;">
+    {message}
+  </div>
+  <div style="background: #FFFFFF; border-radius: 28px; box-shadow: 0 20px 45px rgba(43,38,34,0.16); padding: 36px 40px; width: 100%;">
+    <div style="display: flex; align-items: center; gap: 18px; text-align: left;">
+      <img src="{avatar_uri}" style="width: 84px; height: 84px; border-radius: 999px; object-fit: cover; border: 2px solid #E3CBB4;">
+      <div>
+        <div style="font-weight: 800; font-size: 24px; color: #2B2622;">{brand_name}</div>
+        <div style="font-weight: 500; font-size: 16px; color: #8B8378; margin-top: 2px;">@sweet.studio_official</div>
+      </div>
+    </div>
+    <div style="margin-top: 20px; font-weight: 400; font-size: 16px; color: #59503F; line-height: 1.6; text-align: left; white-space: pre-line;">
+      {bio}
+    </div>
+    <div style="margin-top: 24px; background: #7A2333; border-radius: 12px; padding: 14px 0; font-weight: 700; font-size: 20px; color: #FFFFFF;">
+      팔로우
+    </div>
+  </div>
+  <div style="margin-top: 28px; font-weight: 700; font-size: 24px; color: #7A2333;">
+    ↑ 눌러서 팔로우하기
+  </div>
+  <div class="footer">
+    <div class="brand">
+      <div class="brand-name">{brand_name}</div>
+      <div class="brand-sub">{brand_sub}</div>
+    </div>
+    <div class="page-indicator">{page} / {total}</div>
+  </div>
+</div>
+"""
+
 
 def photo_data_uri(relative_path):
     photo_path = (ROOT / relative_path).resolve()
@@ -183,15 +247,29 @@ def photo_data_uri(relative_path):
 def render_card_html(card, page, total):
     kind = card["type"]
     if kind == "cover":
-        body = COVER_TEMPLATE.format(
-            hook=card["hook"],
-            headline=card["headline"],
-            subtext=card.get("subtext", ""),
-            brand_name=BRAND_NAME,
-            brand_sub=BRAND_SUB,
-            page=page,
-            total=total,
-        )
+        if card.get("photo"):
+            body = COVER_PHOTO_TEMPLATE.format(
+                photo_uri=photo_data_uri(card["photo"]),
+                width=CARD_WIDTH,
+                height=CARD_HEIGHT,
+                hook=card["hook"],
+                headline=card["headline"],
+                subtext=card.get("subtext", ""),
+                brand_name=BRAND_NAME,
+                brand_sub=BRAND_SUB,
+                page=page,
+                total=total,
+            )
+        else:
+            body = COVER_TEMPLATE.format(
+                hook=card["hook"],
+                headline=card["headline"],
+                subtext=card.get("subtext", ""),
+                brand_name=BRAND_NAME,
+                brand_sub=BRAND_SUB,
+                page=page,
+                total=total,
+            )
     elif kind == "tip":
         if card.get("photo"):
             body = TIP_PHOTO_TEMPLATE.format(
@@ -217,13 +295,24 @@ def render_card_html(card, page, total):
                 total=total,
             )
     elif kind == "outro":
-        body = OUTRO_TEMPLATE.format(
-            message=card["message"],
-            brand_name=BRAND_NAME,
-            brand_sub=BRAND_SUB,
-            page=page,
-            total=total,
-        )
+        if card.get("profile_card"):
+            body = OUTRO_PROFILE_TEMPLATE.format(
+                message=card["message"],
+                avatar_uri=photo_data_uri(card.get("avatar", DEFAULT_AVATAR)),
+                bio=card.get("bio", DEFAULT_BIO),
+                brand_name=BRAND_NAME,
+                brand_sub=BRAND_SUB,
+                page=page,
+                total=total,
+            )
+        else:
+            body = OUTRO_TEMPLATE.format(
+                message=card["message"],
+                brand_name=BRAND_NAME,
+                brand_sub=BRAND_SUB,
+                page=page,
+                total=total,
+            )
     else:
         raise ValueError(f"알 수 없는 카드 타입: {kind}")
 
