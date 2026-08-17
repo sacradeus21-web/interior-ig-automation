@@ -89,27 +89,37 @@ async function sendPrivateReply(commentId) {
   );
 }
 
+// 파일 첨부(type:"file")는 raw.githubusercontent.com처럼 Content-Type이
+// application/octet-stream으로 내려오는 호스팅에서 "첨부파일 형식을 지원하지
+// 않음" 에러로 실패했다(실측 확인) - 그래서 파일 첨부 대신, 자료를 보여주는
+// 간단한 웹페이지로 연결되는 링크 버튼을 보낸다. PDF_URL은 이제 그 페이지의
+// URL을 가리킨다(이름은 그대로 두되 값만 웹페이지 주소로 교체해서 사용).
 async function sendResource(recipientId) {
   await callMessagesApi(
     {
       recipient: { id: recipientId },
       message: {
-        text: "자료 보내드려요! 정성껏 조사한 내용이에요🙂 앞으로도 유용한 인테리어 정보만 드릴게요.",
-      },
-    },
-    "자료 안내 메시지"
-  );
-  await callMessagesApi(
-    {
-      recipient: { id: recipientId },
-      message: {
         attachment: {
-          type: "file",
-          payload: { url: process.env.PDF_URL },
+          type: "template",
+          payload: {
+            template_type: "generic",
+            elements: [
+              {
+                title: "자료 보내드려요! 정성껏 조사한 내용이에요🙂 앞으로도 유용한 인테리어 정보만 드릴게요.",
+                buttons: [
+                  {
+                    type: "web_url",
+                    title: "자료 보러가기",
+                    url: process.env.PDF_URL,
+                  },
+                ],
+              },
+            ],
+          },
         },
       },
     },
-    "PDF 발송"
+    "자료 링크 발송"
   );
 }
 
