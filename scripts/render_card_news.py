@@ -68,7 +68,7 @@ html, body {{
   font-weight: 800;
   font-size: 22px;
   letter-spacing: 0.5px;
-  color: #C1694F;
+  color: #7A2333;
 }}
 
 .brand-sub {{
@@ -86,7 +86,7 @@ html, body {{
 
 COVER_TEMPLATE = """
 <div class="card" style="background: linear-gradient(165deg, #F6F1EA 0%, #EDE1D3 55%, #E3CBB4 100%); align-items: center; justify-content: center; text-align: center; padding: 0 90px;">
-  <div style="background: #FFFFFF; border: 1.5px solid #E3CBB4; border-radius: 999px; padding: 14px 32px; font-weight: 600; font-size: 26px; color: #C1694F; margin-bottom: 48px;">
+  <div style="background: #FFFFFF; border: 1.5px solid #E3CBB4; border-radius: 999px; padding: 14px 32px; font-weight: 600; font-size: 26px; color: #7A2333; margin-bottom: 48px;">
     {hook}
   </div>
   <div style="font-weight: 800; font-size: 64px; line-height: 1.35; color: #2B2622; white-space: pre-line;">
@@ -107,7 +107,7 @@ COVER_TEMPLATE = """
 
 TIP_TEMPLATE = """
 <div class="card" style="background: #FFFFFF; padding: 120px 90px 0 90px;">
-  <div style="font-weight: 800; font-size: 130px; color: #EDE1D3; line-height: 1; -webkit-text-stroke: 3px #C1694F;">
+  <div style="font-weight: 800; font-size: 130px; color: #EDE1D3; line-height: 1; -webkit-text-stroke: 3px #7A2333;">
     {number}
   </div>
   <div style="margin-top: 24px; font-weight: 800; font-size: 46px; color: #2B2622; line-height: 1.3;">
@@ -130,13 +130,13 @@ TIP_PHOTO_TEMPLATE = """
 <div class="card" style="background: #FFFFFF;">
   <img src="{photo_uri}" style="width: {width}px; height: 680px; object-fit: cover; display: block;">
   <div style="padding: 44px 90px 0 90px;">
-    <div style="font-weight: 800; font-size: 56px; color: #EDE1D3; line-height: 1; -webkit-text-stroke: 2px #C1694F;">
+    <div style="font-weight: 800; font-size: 56px; color: #EDE1D3; line-height: 1; -webkit-text-stroke: 2px #7A2333;">
       {number}
     </div>
     <div style="margin-top: 14px; font-weight: 800; font-size: 38px; color: #2B2622; line-height: 1.3;">
       {title}
     </div>
-    <div style="margin-top: 10px; font-weight: 600; font-size: 21px; color: #C1694F;">
+    <div style="margin-top: 10px; font-weight: 600; font-size: 21px; color: #7A2333;">
       {meta_line}
     </div>
     <div style="margin-top: 16px; font-weight: 400; font-size: 22px; color: #59503F; line-height: 1.5; white-space: pre-line;">
@@ -158,7 +158,7 @@ OUTRO_TEMPLATE = """
   <div style="font-weight: 800; font-size: 52px; color: #F6F1EA; line-height: 1.4; white-space: pre-line;">
     {message}
   </div>
-  <div style="margin-top: 40px; font-weight: 500; font-size: 24px; color: #C1694F;">
+  <div style="margin-top: 40px; font-weight: 500; font-size: 24px; color: #7A2333;">
     저장하고 나중에 참고하세요 🔖
   </div>
   <div class="footer" style="bottom: 56px;">
