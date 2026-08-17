@@ -289,10 +289,14 @@ def handle_card_news(post, github_repo, github_branch, access_token, ig_account_
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true", help="실제 게시 없이 로직만 확인")
+    parser.add_argument("--id", help="큐 순서를 무시하고 지정한 id의 콘텐츠를 게시 (테스트용)")
     args = parser.parse_args()
 
     bank = load_json(CONTENT_BANK, {"posts": []})
-    post = find_next_postable(bank)
+    if args.id:
+        post = next((p for p in bank["posts"] if p["id"] == args.id and not p.get("used")), None)
+    else:
+        post = find_next_postable(bank)
 
     if post is None:
         print(f"게시할 콘텐츠가 없습니다: 캐러셀용 이미지(최소 {MIN_CAROUSEL_ITEMS}장)가 다 준비된 항목도, 릴스 항목도 없어요. 건너뜁니다.")
