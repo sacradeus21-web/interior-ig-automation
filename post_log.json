@@ -34,5 +34,13 @@
     "post_id": "reel-001",
     "media_kind": "reel",
     "error": "미디어 컨테이너가 시간 내에 준비되지 않았습니다 (timeout)"
+  },
+  {
+    "timestamp": "2026-08-17T08:41:56.545629+00:00",
+    "status": "posted",
+    "post_id": "reel-001",
+    "media_kind": "reel",
+    "ig_media_id": "18021544442884631",
+    "video_file": "reel-001.mp4"
   }
 ]
