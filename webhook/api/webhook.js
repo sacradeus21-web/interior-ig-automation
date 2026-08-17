@@ -56,25 +56,14 @@ async function callMessagesApi(body, label) {
   return true;
 }
 
+// 비공개 답장은 대화창을 열지 않아서, 답장 직후 별도 메시지로 버튼을
+// 보내면 "outside of allowed window" 에러로 실패한다 (실측 확인됨).
+// 그래서 안내 문구 + 팔로우 확인 버튼을 하나의 제네릭 템플릿 메시지로
+// 합쳐서 비공개 답장 자체로 보낸다.
 async function sendPrivateReply(commentId) {
   return callMessagesApi(
     {
       recipient: { comment_id: commentId },
-      message: {
-        text: "댓글 남겨주셔서 감사합니다🙌 콘텐츠는 팔로워분들에게 보내드리고 있어요. 저를 팔로우해주셨다면 아래 버튼을 클릭해주세요!",
-      },
-    },
-    "private reply"
-  );
-}
-
-// 비공개 답장 직후에 보내는 팔로우 확인 버튼. 비공개 답장은 대화창을 열지
-// 않는다는 문서도 있어서, 실패하면 그냥 로그만 남기고 넘어간다 (그래도
-// 이후 사용자가 아무 메시지나 보내면 handleInboundMessage에서 자료가 나간다).
-async function sendFollowButton(recipientId) {
-  return callMessagesApi(
-    {
-      recipient: { id: recipientId },
       message: {
         attachment: {
           type: "template",
@@ -82,7 +71,7 @@ async function sendFollowButton(recipientId) {
             template_type: "generic",
             elements: [
               {
-                title: "팔로우 완료하셨다면 버튼을 눌러주세요",
+                title: "댓글 남겨주셔서 감사합니다🙌 콘텐츠는 팔로워분들에게 보내드리고 있어요. 저를 팔로우해주셨다면 아래 버튼을 클릭해주세요!",
                 buttons: [
                   {
                     type: "postback",
@@ -96,7 +85,7 @@ async function sendFollowButton(recipientId) {
         },
       },
     },
-    "팔로우 버튼 발송"
+    "private reply"
   );
 }
 
@@ -127,10 +116,7 @@ async function sendResource(recipientId) {
 async function handleComment(comment) {
   // 우리 계정 자신이 남긴 댓글(답글 등)은 무시
   if (!comment.from || comment.from.id === process.env.IG_BUSINESS_ACCOUNT_ID) return;
-  const ok = await sendPrivateReply(comment.id);
-  if (ok) {
-    await sendFollowButton(comment.from.id);
-  }
+  await sendPrivateReply(comment.id);
 }
 
 async function handleMessagingEvent(m) {
