@@ -1,5 +1,6 @@
-// 댓글 -> 비공개 답장(팔로우+답장 요청) -> 답장 오면 PDF 발송, 흐름을 처리하는
-// Instagram 웹훅 수신 엔드포인트. Vercel Node 서버리스 함수로 배포된다.
+// 댓글 -> 비공개 답장(팔로우 안내) -> "팔로우했어요." 버튼(또는 아무 답장) ->
+// 자료 발송, 흐름을 처리하는 Instagram 웹훅 수신 엔드포인트.
+// Vercel Node 서버리스 함수로 배포된다.
 //
 // 필요 환경변수:
 //   IG_ACCESS_TOKEN        - graph.instagram.com용 장기 액세스 토큰
@@ -9,8 +10,8 @@
 //   PDF_URL                - 발송할 PDF의 공개 URL (raw.githubusercontent.com)
 //
 // 팔로우 여부는 Instagram API가 지원하지 않아 실제로 검증하지 않는다(양심제) -
-// 비공개 답장에서 "팔로우 후 답장해주세요"라고만 안내하고, 그 이후 오는 첫
-// 메시지에는 무조건 PDF를 보낸다.
+// "팔로우했어요." 버튼을 누르거나(postback) 아무 메시지나 답장하면(일반
+// 텍스트) 그대로 믿고 자료를 보낸다.
 
 const crypto = require("crypto");
 
@@ -19,6 +20,7 @@ export const config = {
 };
 
 const GRAPH_API_VERSION = "v21.0";
+const FOLLOW_CONFIRM_PAYLOAD = "CONFIRM_FOLLOWED";
 
 function readRawBody(req) {
   return new Promise((resolve, reject) => {
@@ -40,40 +42,110 @@ function verifySignature(rawBody, signatureHeader, appSecret) {
   return crypto.timingSafeEqual(a, b);
 }
 
-async function sendPrivateReply(commentId, text) {
+async function callMessagesApi(body, label) {
   const url = `https://graph.instagram.com/${GRAPH_API_VERSION}/${process.env.IG_BUSINESS_ACCOUNT_ID}/messages`;
-  const body = {
-    recipient: { comment_id: commentId },
-    message: { text },
-  };
   const resp = await fetch(url + `?access_token=${process.env.IG_ACCESS_TOKEN}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
   if (!resp.ok) {
-    console.error("private reply 실패", await resp.text());
+    console.error(`${label} 실패`, await resp.text());
+    return false;
+  }
+  return true;
+}
+
+async function sendPrivateReply(commentId) {
+  return callMessagesApi(
+    {
+      recipient: { comment_id: commentId },
+      message: {
+        text: "댓글 남겨주셔서 감사합니다🙌 콘텐츠는 팔로워분들에게 보내드리고 있어요. 저를 팔로우해주셨다면 아래 버튼을 클릭해주세요!",
+      },
+    },
+    "private reply"
+  );
+}
+
+// 비공개 답장 직후에 보내는 팔로우 확인 버튼. 비공개 답장은 대화창을 열지
+// 않는다는 문서도 있어서, 실패하면 그냥 로그만 남기고 넘어간다 (그래도
+// 이후 사용자가 아무 메시지나 보내면 handleInboundMessage에서 자료가 나간다).
+async function sendFollowButton(recipientId) {
+  return callMessagesApi(
+    {
+      recipient: { id: recipientId },
+      message: {
+        attachment: {
+          type: "template",
+          payload: {
+            template_type: "generic",
+            elements: [
+              {
+                title: "팔로우 완료하셨다면 버튼을 눌러주세요",
+                buttons: [
+                  {
+                    type: "postback",
+                    title: "팔로우했어요.",
+                    payload: FOLLOW_CONFIRM_PAYLOAD,
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      },
+    },
+    "팔로우 버튼 발송"
+  );
+}
+
+async function sendResource(recipientId) {
+  await callMessagesApi(
+    {
+      recipient: { id: recipientId },
+      message: {
+        text: "자료 보내드려요! 정성껏 조사한 내용이에요🙂 앞으로도 유용한 인테리어 정보만 드릴게요.",
+      },
+    },
+    "자료 안내 메시지"
+  );
+  await callMessagesApi(
+    {
+      recipient: { id: recipientId },
+      message: {
+        attachment: {
+          type: "file",
+          payload: { url: process.env.PDF_URL },
+        },
+      },
+    },
+    "PDF 발송"
+  );
+}
+
+async function handleComment(comment) {
+  // 우리 계정 자신이 남긴 댓글(답글 등)은 무시
+  if (!comment.from || comment.from.id === process.env.IG_BUSINESS_ACCOUNT_ID) return;
+  const ok = await sendPrivateReply(comment.id);
+  if (ok) {
+    await sendFollowButton(comment.from.id);
   }
 }
 
-async function sendPdf(recipientId) {
-  const url = `https://graph.instagram.com/${GRAPH_API_VERSION}/${process.env.IG_BUSINESS_ACCOUNT_ID}/messages`;
-  const body = {
-    recipient: { id: recipientId },
-    message: {
-      attachment: {
-        type: "file",
-        payload: { url: process.env.PDF_URL },
-      },
-    },
-  };
-  const resp = await fetch(url + `?access_token=${process.env.IG_ACCESS_TOKEN}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!resp.ok) {
-    console.error("PDF 발송 실패", await resp.text());
+async function handleMessagingEvent(m) {
+  if (!m.sender || m.sender.id === process.env.IG_BUSINESS_ACCOUNT_ID) return;
+
+  if (m.postback) {
+    if (m.postback.payload === FOLLOW_CONFIRM_PAYLOAD) {
+      await sendResource(m.sender.id);
+    }
+    return;
+  }
+
+  if (m.message && !m.message.is_echo) {
+    // 버튼 대신 그냥 텍스트로 답장하는 경우도 그대로 자료를 보낸다.
+    await sendResource(m.sender.id);
   }
 }
 
@@ -129,19 +201,11 @@ module.exports = async (req, res) => {
         : (entry.changes || []).filter((c) => c.field === "comments").map((c) => c.value);
 
       for (const comment of commentChanges) {
-        // 우리 계정 자신이 남긴 댓글(답글 등)은 무시
-        if (comment.from && comment.from.id !== process.env.IG_BUSINESS_ACCOUNT_ID) {
-          await sendPrivateReply(
-            comment.id,
-            "댓글 감사해요! 🙂 저희 계정 팔로우하시고 이 메시지에 아무 답장이나 주시면, 오늘 소개해드린 제품 정리 자료를 PDF로 보내드릴게요."
-          );
-        }
+        await handleComment(comment);
       }
 
       for (const m of entry.messaging || []) {
-        if (!m.message || m.message.is_echo) continue;
-        if (m.sender && m.sender.id === process.env.IG_BUSINESS_ACCOUNT_ID) continue;
-        await sendPdf(m.sender.id);
+        await handleMessagingEvent(m);
       }
     }
   } catch (e) {
