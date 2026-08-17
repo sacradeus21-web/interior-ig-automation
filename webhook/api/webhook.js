@@ -110,13 +110,25 @@ module.exports = async (req, res) => {
     return;
   }
 
+  // Meta는 이 페이로드를 최상위가 단일 객체({object, entry:[...]})인 경우와
+  // 배열([{object, entry:[...]}, ...])인 경우가 둘 다 있어서 두 형태 모두
+  // 처리해야 한다 (배열 형태를 놓쳐서 조용히 아무 것도 안 하는 버그가 있었음).
+  const batches = Array.isArray(payload) ? payload : [payload];
+  console.log("웹훅 수신", JSON.stringify(batches).slice(0, 1000));
+
   // 항상 즉시 200 반환 대상이므로, 실제 처리는 응답 이후에도 계속 진행되도록
   // await 없이 fire-and-forget 하지 않고 여기서 끝까지 처리한 뒤 응답한다
   // (Vercel 서버리스는 응답 후 즉시 함수가 종료될 수 있어 순서를 지켜야 함).
   try {
-    for (const entry of payload.entry || []) {
-      if (entry.field === "comments" && entry.value) {
-        const comment = entry.value;
+    const entries = batches.flatMap((b) => b.entry || []);
+    for (const entry of entries) {
+      // 계정 유형/API 버전에 따라 최상위 field/value 형태와 고전적인
+      // changes[] 래퍼 형태가 둘 다 관측돼서 둘 다 지원한다.
+      const commentChanges = entry.field === "comments" && entry.value
+        ? [entry.value]
+        : (entry.changes || []).filter((c) => c.field === "comments").map((c) => c.value);
+
+      for (const comment of commentChanges) {
         // 우리 계정 자신이 남긴 댓글(답글 등)은 무시
         if (comment.from && comment.from.id !== process.env.IG_BUSINESS_ACCOUNT_ID) {
           await sendPrivateReply(
